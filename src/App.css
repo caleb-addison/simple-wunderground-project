@@ -1,35 +1,39 @@
-.json-output {
-    width: 750px;
+.api-form {
+    max-width: 750px;
 }
-
-.error {
-    color: red;
+.right-align-checkbox {
+    display: flex !important;
+    justify-content: flex-end;
+}
+.right-align-checkbox input[type='checkbox'] {
+    margin-right: 5px;
+}
+button.btn-light {
+    border-color: var(--bs-border-color) !important;
+}
+.navbar-custom {
+    background-color: #5e6061;
+}
+.navbar-custom span {
+    color: white;
+}
+.warning {
+    color: orange;
 }
 .success {
     color: green;
 }
-.warning {
+.danger {
+    color: red;
+}
+.info {
     color: gray;
 }
-
-.input-label {
-    display: inline-block;
-    width: 150px;
-    /* text-align: right; */
-    /* margin-right: 10px; */
+.monospace {
+    font-family: monospace;
 }
-
-.input-field {
-    width: 250px;
-    padding: 3px 6px;
-    margin: 2px 0;
-}
-
-input[type='checkbox'] {
-    margin-left: 0;
-}
-
-.fetch-button {
-    padding: 5px 10px;
-    font-size: 14px;
+.json-output {
+    width: 750px;
+    font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+        monospace;
 }
