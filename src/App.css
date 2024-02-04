@@ -37,3 +37,11 @@ button.btn-light {
     font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
         monospace;
 }
+.copy-to-clipboard {
+    color: gray;
+    width: auto !important;
+}
+.copy-to-clipboard:hover {
+    color: #444444;
+    cursor: pointer;
+}

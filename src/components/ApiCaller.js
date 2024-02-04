@@ -2,7 +2,12 @@ import React, { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
 import Cookies from 'js-cookie';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faSpinner } from '@fortawesome/free-solid-svg-icons';
+import {
+    faSpinner,
+    faCopy,
+    faFileArrowDown,
+    faCheck,
+} from '@fortawesome/free-solid-svg-icons';
 import Button from 'react-bootstrap/Button';
 import Col from 'react-bootstrap/Col';
 import Form from 'react-bootstrap/Form';
@@ -10,8 +15,9 @@ import Row from 'react-bootstrap/Row';
 import Dropdown from 'react-bootstrap/Dropdown';
 import DropdownButton from 'react-bootstrap/DropdownButton';
 import InputGroup from 'react-bootstrap/InputGroup';
+import ExcelJS from 'exceljs';
 
-const ApiCaller = ({ onDataReceived }) => {
+const ApiCaller = () => {
     const [endpoint, setEndpoint] = useState('');
     const [endpointText, setEndpointText] = useState('');
     const [pathParams, setPathParams] = useState({
@@ -30,6 +36,11 @@ const ApiCaller = ({ onDataReceived }) => {
         numericPrecision: 'decimal',
     });
     const [jsonData, setJsonData] = useState('');
+    const [copied, setCopied] = useState(false);
+    const [exportingXlsx, setExportingXlsx] = useState(false);
+    const [exportedXlsx, setExportedXlsx] = useState(false);
+    const [exportingCsv, setExportingCsv] = useState(false);
+    const [exportedCsv, setExportedCsv] = useState(false);
 
     // References
     const endpointRef = useRef(null);
@@ -46,8 +57,18 @@ const ApiCaller = ({ onDataReceived }) => {
             params: ['numericPrecision'],
         },
         {
+            text: '1 Day - Rapid History',
+            url: 'observations/all/1day',
+            params: ['numericPrecision'],
+        },
+        {
             text: '7 Day History',
             url: 'dailysummary/7day',
+            params: ['numericPrecision'],
+        },
+        {
+            text: '7 Day - Hourly History',
+            url: 'observations/hourly/7day',
             params: ['numericPrecision'],
         },
     ];
@@ -135,13 +156,131 @@ const ApiCaller = ({ onDataReceived }) => {
         }
     };
 
-    const fetchData = async () => {
-        // Reset message
+    const copyDataToClipboard = () => {
+        setCopied(true);
+        navigator.clipboard.writeText(jsonData);
+    };
+
+    const flattenObject = (array) => {
+        const flattenObjectInner = (ob) => {
+            let toReturn = {};
+
+            for (let i in ob) {
+                if (!ob.hasOwnProperty(i)) continue;
+
+                if (typeof ob[i] == 'object' && ob[i] !== null) {
+                    let flatObject = flattenObjectInner(ob[i]);
+                    for (let x in flatObject) {
+                        if (!flatObject.hasOwnProperty(x)) continue;
+                        toReturn[x] = flatObject[x];
+                    }
+                } else {
+                    toReturn[i] = ob[i];
+                }
+            }
+            return toReturn;
+        };
+
+        if (array.length === 1) {
+            return [flattenObjectInner(array[0])];
+        } else if (array.length > 1) {
+            return array.map(flattenObjectInner);
+        }
+    };
+
+    const download = (buffer, fileExtension) => {
+        const typeString =
+            fileExtension === 'xlsx'
+                ? 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+                : fileExtension === 'csv'
+                ? 'text/csv'
+                : '';
+        if (!typeString) return;
+
+        const blob = new Blob([buffer], {
+            type: typeString,
+        });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `${
+            pathParams.stationId
+        } ${endpointText} ${new Date().toISOString()}.${fileExtension}`;
+        a.click();
+    };
+
+    const exportData = (format) => {
+        format === 'xlsx' ? setExportingXlsx(true) : setExportingCsv(true);
+
+        const workbook = new ExcelJS.Workbook();
+        const worksheet = workbook.addWorksheet('Data');
+        const data = JSON.parse(jsonData);
+
+        let headers, rows;
+        switch (endpoint) {
+            case 'observations/current':
+            case 'observations/all/1day':
+            case 'observations/hourly/7day':
+                const observations = flattenObject(data.observations);
+                headers = Object.keys(observations[0]);
+                rows = Object.values(observations);
+                break;
+            case 'dailysummary/7day':
+                const dailySummaries = flattenObject(data.summaries);
+                headers = Object.keys(dailySummaries[0]);
+                rows = Object.values(dailySummaries);
+                break;
+        }
+
+        // Common
+        const headerRow = worksheet.addRow(headers);
+        rows.forEach((row) => {
+            worksheet.addRow(Object.values(row));
+        });
+
+        // Excel formatting
+        if (format === 'xlsx') {
+            headerRow.eachCell((cell) => {
+                cell.fill = {
+                    type: 'pattern',
+                    pattern: 'solid',
+                    fgColor: { argb: 'FFD3D3D3' },
+                };
+                cell.font = {
+                    bold: true,
+                };
+            });
+        }
+
+        if (format === 'xlsx') {
+            workbook.xlsx.writeBuffer().then((buffer) => {
+                download(buffer, 'xlsx');
+            });
+        } else {
+            workbook.csv.writeBuffer().then((buffer) => {
+                download(buffer, 'csv');
+            });
+        }
+
+        format === 'xlsx' ? setExportedXlsx(true) : setExportedCsv(true);
+        format === 'xlsx' ? setExportingXlsx(false) : setExportingCsv(false);
+    };
+
+    const resetState = () => {
         setOutputMessage({
             message: '',
             class: '',
         });
         setQueryTimestamp(null);
+        setCopied(false);
+        setExportingXlsx(false);
+        setExportedXlsx(false);
+        setExportingCsv(false);
+        setExportedCsv(false);
+    };
+
+    const fetchData = async () => {
+        resetState();
 
         // Validate inputs
         if (!endpoint) {
@@ -182,7 +321,6 @@ const ApiCaller = ({ onDataReceived }) => {
             const response = await axios.get(constructApiUrl(), {
                 params: getFilteredApiParams(),
             });
-            onDataReceived(response.data);
             setQueryTimestamp(new Date().toISOString());
             setJsonData(JSON.stringify(response.data, null, 2));
             setOutputMessage({
@@ -383,7 +521,7 @@ const ApiCaller = ({ onDataReceived }) => {
                             style={{ fontSize: '0.8rem', fontStyle: 'italic' }}
                         >
                             {queryTimestamp &&
-                                `(query completed ${queryTimestamp})`}
+                                `query completed ${queryTimestamp}`}
                         </Form.Label>
                     </Col>
                 </Row>
@@ -392,12 +530,67 @@ const ApiCaller = ({ onDataReceived }) => {
                         as="textarea"
                         className="monospace"
                         readOnly
-                        value={jsonData ? jsonData : 'No output to display'}
-                        rows={jsonData ? 20 : 5}
+                        value={jsonData ? jsonData : 'No data'}
+                        rows={6}
                     />
                 </Row>
             </Form.Group>
 
+            <Form.Group className="d-flex justify-content-center gap-3 mt-3">
+                <Button
+                    variant="success"
+                    disabled={!jsonData}
+                    style={{ width: '175px' }}
+                    onClick={copyDataToClipboard}
+                >
+                    <FontAwesomeIcon icon={copied ? faCheck : faCopy} />{' '}
+                    {copied ? 'copied' : 'copy to clipboard'}
+                </Button>
+                <Button
+                    variant="success"
+                    disabled={!jsonData || exportingXlsx}
+                    style={{ width: '175px' }}
+                    onClick={() => exportData('xlsx')}
+                >
+                    <FontAwesomeIcon
+                        icon={
+                            exportingXlsx
+                                ? faSpinner
+                                : exportedXlsx
+                                ? faCheck
+                                : faFileArrowDown
+                        }
+                    />{' '}
+                    {exportingXlsx
+                        ? 'downloading...'
+                        : exportedXlsx
+                        ? 'xlsx downloaded'
+                        : 'download as .xlsx'}
+                </Button>
+                <Button
+                    variant="success"
+                    disabled={!jsonData || exportingCsv}
+                    style={{ width: '175px' }}
+                    onClick={() => exportData('csv')}
+                >
+                    <FontAwesomeIcon
+                        icon={
+                            exportingCsv
+                                ? faSpinner
+                                : exportedCsv
+                                ? faCheck
+                                : faFileArrowDown
+                        }
+                    />{' '}
+                    {exportingCsv
+                        ? 'downloading...'
+                        : exportedCsv
+                        ? 'csv downloaded'
+                        : 'download as .csv'}
+                </Button>
+            </Form.Group>
+
+            {/* TODO remove for prod */}
             <div style={{ display: 'none' }}>
                 <hr />
                 <b>debugging</b>
@@ -422,7 +615,5 @@ const ApiCaller = ({ onDataReceived }) => {
         </Form>
     );
 };
-
-// chrome://flags/#block-insecure-private-network-requests
 
 export default ApiCaller;
